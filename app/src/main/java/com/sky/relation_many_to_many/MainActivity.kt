@@ -95,11 +95,29 @@ data class Dog(
 )
 
 
+@Entity(tableName = "cat")
+data class Cat(
+    @PrimaryKey
+    val catId: Int,
+    val name: String
+)
+
 @Entity(primaryKeys = ["ownerId", "dogId"])
 data class OwnerDogCrossRef(
     val ownerId: Int,
     val dogId: Int
 )
+
+@Entity(primaryKeys = ["ownerId", "catId"])
+data class OwnerCatCrossRef(
+    val ownerId: Int,
+    val catId: Int
+)
+
+
+
+
+
 
 data class OwnerWithDogs(
     @Embedded val owner: Owner,
@@ -123,6 +141,31 @@ data class DogWithOwners(
 )
 
 
+data class OwnerWithCats(
+    @Embedded val owner: Owner,
+    @Relation(
+        parentColumn = "ownerId",
+        entityColumn = "catId",
+        associateBy = Junction(OwnerCatCrossRef::class)
+    )
+    val cats: List<Cat>
+)
+
+
+data class CatWithOwners(
+    @Embedded val cat: Cat,
+    @Relation(
+        parentColumn = "catId",
+        entityColumn = "ownerId",
+        associateBy = Junction(OwnerCatCrossRef::class)
+    )
+    val owners: List<Owner>
+)
+
+
+
+
+
 @Dao
 interface OwnerDogDao {
 
@@ -132,8 +175,16 @@ interface OwnerDogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
      fun insertDog(dog: Dog)
 
+
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
      fun insertOwnerDogCrossRef(crossRef: OwnerDogCrossRef)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertCat(cat: Cat)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertOwnerCatCrossRef(crossRef: OwnerCatCrossRef)
 
 
     @Transaction
@@ -144,12 +195,23 @@ interface OwnerDogDao {
     @Transaction
     @Query("SELECT * FROM dog WHERE dogId = :dogId")
      fun getDogWithOwners(dogId: Int): List<DogWithOwners>
+
+
+    @Transaction
+    @Query("SELECT * FROM owner WHERE ownerId = :ownerId")
+    fun getOwnerWithCats(ownerId: Int): List<OwnerWithCats>
+
+    @Transaction
+    @Query("SELECT * FROM cat WHERE catId = :catId")
+    fun getCatWithOwners(catId: Int): List<CatWithOwners>
+
+
 }
 
 
 @Database(
-    entities = [Owner::class, Dog::class, OwnerDogCrossRef::class],
-    version = 1,
+    entities = [Owner::class, Dog::class, OwnerDogCrossRef::class, Cat::class, OwnerCatCrossRef::class],
+    version = 2,
     exportSchema = false
 )
 abstract class OwnerDogDatabase : RoomDatabase() {
@@ -184,6 +246,8 @@ class UserRepository(private val OwnerDogDao: OwnerDogDao) {
         OwnerDogDao.insertDog(dog)
     }
 
+
+
      fun insertOwnerDogCrossRef(crossRef: OwnerDogCrossRef){
         OwnerDogDao.insertOwnerDogCrossRef(crossRef)
     }
@@ -196,7 +260,25 @@ class UserRepository(private val OwnerDogDao: OwnerDogDao) {
         return OwnerDogDao.getDogWithOwners(dogId)
     }
 
+    fun insertCat(cat: Cat) {
+        OwnerDogDao.insertCat(cat)
+    }
+
+    fun insertOwnerCatCrossRef(crossRef: OwnerCatCrossRef) {
+        OwnerDogDao.insertOwnerCatCrossRef(crossRef)
+    }
+
+    fun getOwnerWithCats(ownerId: Int): List<OwnerWithCats> {
+        return OwnerDogDao.getOwnerWithCats(ownerId)
+    }
+
+    fun getCatWithOwners(catId: Int): List<CatWithOwners> {
+        return OwnerDogDao.getCatWithOwners(catId)
+    }
+
 }
+
+
 
 
 class vm(app:Application):AndroidViewModel(app) {
@@ -215,6 +297,7 @@ class vm(app:Application):AndroidViewModel(app) {
         obj.insertDog(dog)
     }
 
+
      fun insertOwnerDogCrossRef(crossRef: OwnerDogCrossRef){
         obj.insertOwnerDogCrossRef(crossRef)
     }
@@ -227,6 +310,23 @@ class vm(app:Application):AndroidViewModel(app) {
         return obj.getDogWithOwners(dogId)
     }
 
+    fun insertCat(cat: Cat) {
+        obj.insertCat(cat)
+    }
+
+    fun insertOwnerCatCrossRef(crossRef: OwnerCatCrossRef) {
+        obj.insertOwnerCatCrossRef(crossRef)
+    }
+
+    fun getOwnerWithCats(ownerId: Int): List<OwnerWithCats> {
+        return obj.getOwnerWithCats(ownerId)
+    }
+
+    fun getCatWithOwners(catId: Int): List<CatWithOwners> {
+        return obj.getCatWithOwners(catId)
+    }
+
+
 }
 val owners = listOf(
     Owner(1, "Alice"),
@@ -236,11 +336,24 @@ val dogs = listOf(
     Dog(1, "Rex"),
     Dog(2, "Buddy")
 )
+
 val ownerDogCrossRefs = listOf(
     OwnerDogCrossRef(1, 1), // Alice owns Rex
     OwnerDogCrossRef(1, 2), // Alice owns Buddy
     OwnerDogCrossRef(2, 1)  // Bob owns Rex
 )
+
+
+val cats = listOf(
+    Cat(1, "Tom"),
+    Cat(2, "Mister Cat")
+)
+
+val ownerCatCrossRefs = listOf(
+    OwnerCatCrossRef(1, 1), // Alice owns Whiskers
+    OwnerCatCrossRef(2, 2)  // Bob owns Mittens
+)
+
 
 
 
@@ -256,6 +369,7 @@ fun many_to_many(mainActivity: MainActivity){
         vm.insertDog(dog)
     }
 
+
     owners.forEach {
         vm.insertOwner(it)
     }
@@ -263,6 +377,10 @@ fun many_to_many(mainActivity: MainActivity){
     ownerDogCrossRefs.forEach {
         vm.insertOwnerDogCrossRef(it)
     }
+
+
+    cats.forEach { vm.insertCat(it) }
+    ownerCatCrossRefs.forEach { vm.insertOwnerCatCrossRef(it) }
 
     var Dogslist by remember{
         mutableStateOf(vm.getOwnerWithDogs(1))
@@ -279,6 +397,11 @@ fun many_to_many(mainActivity: MainActivity){
     var DogId by remember{
         mutableStateOf("")
     }
+
+
+    var catOwnerList by remember { mutableStateOf(vm.getOwnerWithCats(1)) }
+    var catId by remember { mutableStateOf("") }
+
 
     LazyColumn(modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -330,5 +453,27 @@ fun many_to_many(mainActivity: MainActivity){
                 Text(text = owners.name)
             }
         }
+
+
+        item {
+            OutlinedTextField(
+                value = catId,
+                onValueChange = { catId = it },
+                label = { Text("Enter Cat ID") }
+            )
+            Button(onClick = {
+                catOwnerList = vm.getOwnerWithCats(if (catId.isNotBlank() && catId.isDigitsOnly()) catId.toInt() else 0)
+            }) {
+                Text("Submit")
+            }
+        }
+
+        itemsIndexed(catOwnerList) { index,item ->
+            Text("Owner: ${item.owner.name}")
+            item.cats.forEach { cat ->
+                Text("  Cat: ${cat.name}")
+            }
+        }
+
     }
 }
